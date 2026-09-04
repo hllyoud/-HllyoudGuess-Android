@@ -98,27 +98,26 @@ jobs:
             adb install -r HllyoudGuess.apk
             adb shell pm list packages | grep -F "package:com.hllyoud.guess"
             adb logcat -c
+
+            # Keep the soft keyboard out of the way; adb input still types into focused fields.
+            adb shell ime list -s > /tmp/imes.txt || true
+            while read -r ime; do [ -n "$ime" ] && adb shell ime disable "$ime" >/dev/null 2>&1 || true; done < /tmp/imes.txt
+
             adb shell am force-stop com.hllyoud.guess
             adb shell am start -W -n com.hllyoud.guess/.MainActivity | tee android-start.txt
             sleep 10
             adb exec-out screencap -p > 01-language.png
 
-            # Arabic
+            # Choose Arabic.
             adb shell input tap 675 730
             sleep 4
             adb exec-out screencap -p > 02-login.png
 
-            # Username: type, then hide IME before tapping password.
+            # Fill the visible login form with no IME overlay.
             adb shell input tap 450 760
             adb shell input text "$ANDROID_TEST_USER"
-            adb shell input keyevent 4
-            sleep 1
-
-            # Password: type, hide IME, then tap the visible login button.
             adb shell input tap 450 960
             adb shell input text "$ANDROID_TEST_PASS"
-            adb shell input keyevent 4
-            sleep 1
             adb exec-out screencap -p > 03-filled-login.png
             adb shell input tap 470 1105
             sleep 10
@@ -127,9 +126,30 @@ jobs:
             adb shell uiautomator dump /sdcard/after-login.xml >/dev/null 2>&1 || true
             adb pull /sdcard/after-login.xml after-login.xml >/dev/null 2>&1 || true
             adb logcat -d > android-logcat.txt
+
+            # It must still be our app, not the launcher/search app.
+            adb shell dumpsys activity activities | grep -F "mResumedActivity" | tee resumed.txt
+            grep -F "com.hllyoud.guess" resumed.txt
             adb shell ps -A | grep -F "com.hllyoud.guess"
+
+            # Fail on a crash.
             python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
-            echo ANDROID_LOGIN_FLOW_OK
+
+            # Fail if the login form is still the foreground UI after submission.
+            python3 - <<'PY'
+            from PIL import Image
+            a=Image.open('02-login.png').convert('RGB')
+            b=Image.open('04-after-login.png').convert('RGB')
+            assert a.size==b.size
+            # Mean absolute pixel difference; a successful login changes the screen substantially.
+            import numpy as np
+            x=np.asarray(a,dtype=np.int16); y=np.asarray(b,dtype=np.int16)
+            diff=np.abs(x-y).mean()
+            print('POST_LOGIN_PIXEL_DIFF',float(diff))
+            assert diff>8.0, 'Screen did not change enough after login'
+            PY
+
+            echo ANDROID_REAL_LOGIN_OK
 
       - name: Upload Android runtime evidence
         if: always()
@@ -142,6 +162,7 @@ jobs:
             03-filled-login.png
             04-after-login.png
             after-login.xml
+            resumed.txt
             android-start.txt
             android-logcat.txt
           if-no-files-found: ignore
