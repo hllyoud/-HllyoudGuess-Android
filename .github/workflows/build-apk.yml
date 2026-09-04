@@ -75,7 +75,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android UI smoke test
+      - name: Android UI signup smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -93,11 +93,14 @@ jobs:
             adb exec-out screencap -p > 01-language.png
             adb shell input tap 675 730
             sleep 4
-            adb exec-out screencap -p > 02-after-language.png
+            adb exec-out screencap -p > 02-login.png
+            adb shell input tap 370 535
+            sleep 3
+            adb exec-out screencap -p > 03-signup.png
             adb logcat -d > android-logcat.txt
             adb shell ps -A | grep -F "com.hllyoud.guess"
             python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
-            echo ANDROID_UI_SMOKE_OK
+            echo ANDROID_SIGNUP_SCREEN_OK
 
       - name: Upload Android runtime evidence
         if: always()
@@ -106,7 +109,8 @@ jobs:
           name: HllyoudGuess-Android-runtime
           path: |
             01-language.png
-            02-after-language.png
+            02-login.png
+            03-signup.png
             android-start.txt
             android-logcat.txt
           if-no-files-found: ignore
