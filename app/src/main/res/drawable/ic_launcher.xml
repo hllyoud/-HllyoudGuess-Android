@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Deep violet app tile -->
+    <path
+        android:fillColor="#24133F"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Soft halo behind the symbol -->
+    <path
+        android:fillColor="#3B2266"
+        android:pathData="M54,10A44,44 0,1 0,54 98A44,44 0,1 0,54 10" />
+
+    <!-- Brain silhouette -->
+    <path
+        android:fillColor="#F4EEFF"
+        android:pathData="M50,28C46,20 34,21 32,30C23,30 18,39 22,47C16,54 20,65 29,67C29,77 40,83 49,77L49,58C44,60 39,57 38,52C42,55 47,54 49,50L49,38C45,40 40,38 39,34C43,36 47,34 50,31ZM58,28C62,20 74,21 76,30C85,30 90,39 86,47C92,54 88,65 79,67C79,77 68,83 59,77L59,58C64,60 69,57 70,52C66,55 61,54 59,50L59,38C63,40 68,38 69,34C65,36 61,34 58,31Z" />
+
+    <!-- Center groove -->
+    <path
+        android:fillColor="#8E68FF"
+        android:pathData="M52,28h4v49h-4z" />
+
+    <!-- Lightning bolt -->
+    <path
+        android:fillColor="#FFD83D"
+        android:strokeColor="#24133F"
+        android:strokeWidth="1.6"
+        android:strokeLineJoin="round"
+        android:pathData="M61,38L48,58H57L51,78L72,52H62Z" />
+</vector>
