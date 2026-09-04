@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -17,10 +16,19 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
 public class MainActivity extends Activity {
     private static final String GAME_URL = "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/hllyoud-app";
+    private static final String APP_UA = "HllyoudGuessAndroid/1.0.3";
+
     private WebView webView;
     private FrameLayout root;
+    private volatile boolean destroyed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,14 +46,11 @@ public class MainActivity extends Activity {
     }
 
     private void createAndLoadWebView() {
+        root.removeAllViews();
+        showLoading();
+
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(7, 9, 19));
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        );
-        root.addView(webView, params);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -55,11 +60,13 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
 
         try {
             String ua = settings.getUserAgentString();
             if (ua != null && !ua.contains("HllyoudGuessAndroid")) {
-                settings.setUserAgentString(ua + " HllyoudGuessAndroid/1.0.1");
+                settings.setUserAgentString(ua + " " + APP_UA);
             }
         } catch (Throwable ignored) {
         }
@@ -94,7 +101,75 @@ public class MainActivity extends Activity {
             }
         });
 
-        webView.loadUrl(GAME_URL);
+        fetchAndRenderGame();
+    }
+
+    private void showLoading() {
+        TextView loading = new TextView(this);
+        loading.setText("Hllyoud guess\nجاري تحميل اللعبة...");
+        loading.setTextColor(Color.WHITE);
+        loading.setTextSize(20f);
+        loading.setGravity(Gravity.CENTER);
+        root.addView(loading, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+    }
+
+    private void fetchAndRenderGame() {
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(GAME_URL);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(25000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+                connection.setRequestProperty("User-Agent", APP_UA);
+
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException("HTTP " + status);
+                }
+
+                String html;
+                try (InputStream input = connection.getInputStream();
+                     ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, read);
+                    }
+                    html = output.toString(StandardCharsets.UTF_8.name());
+                }
+
+                if (html.length() < 1000 || !html.toLowerCase().contains("<html")) {
+                    throw new IllegalStateException("Invalid game HTML");
+                }
+
+                final String gameHtml = html;
+                runOnUiThread(() -> {
+                    if (destroyed || isFinishing() || webView == null) return;
+                    root.removeAllViews();
+                    root.addView(webView, new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                    ));
+                    // The edge endpoint currently arrives with a text-oriented response header.
+                    // Loading the fetched bytes explicitly as HTML makes Android WebView render
+                    // the exact same live game instead of showing the HTML source as plain text.
+                    webView.loadDataWithBaseURL(GAME_URL, gameHtml, "text/html", "UTF-8", GAME_URL);
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    if (!destroyed && !isFinishing()) showConnectionError();
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "HllyoudGameLoader").start();
     }
 
     private TextView makeButton(String text) {
@@ -109,7 +184,7 @@ public class MainActivity extends Activity {
     }
 
     private void showConnectionError() {
-        if (isFinishing() || root == null) return;
+        if (destroyed || isFinishing() || root == null) return;
         root.removeAllViews();
 
         LinearLayout panel = new LinearLayout(this);
@@ -127,7 +202,6 @@ public class MainActivity extends Activity {
 
         TextView retry = makeButton("إعادة المحاولة");
         retry.setOnClickListener(v -> {
-            root.removeAllViews();
             try {
                 createAndLoadWebView();
             } catch (Throwable error) {
@@ -143,7 +217,7 @@ public class MainActivity extends Activity {
     }
 
     private void showSafeFallback() {
-        if (root == null) return;
+        if (destroyed || root == null) return;
         root.removeAllViews();
 
         LinearLayout panel = new LinearLayout(this);
@@ -193,6 +267,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         try {
             if (webView != null) {
                 webView.stopLoading();
