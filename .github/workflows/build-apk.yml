@@ -75,7 +75,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android emulator install and launch test
+      - name: Android UI smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -84,31 +84,20 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -e
             adb install -r HllyoudGuess.apk
             adb shell pm list packages | grep -F "package:com.hllyoud.guess"
             adb logcat -c
             adb shell am force-stop com.hllyoud.guess
             adb shell am start -W -n com.hllyoud.guess/.MainActivity | tee android-start.txt
-            sleep 12
-            adb exec-out screencap -p > android-screen.png || true
-            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/window.xml android-window.xml >/dev/null 2>&1 || true
-            adb logcat -d > android-logcat.txt || true
-            PID=$(adb shell pidof com.hllyoud.guess || true)
-            echo "App PID: $PID"
-            if [ -z "$PID" ]; then
-              echo "APP_PROCESS_NOT_RUNNING"
-              tail -n 500 android-logcat.txt
-              exit 1
-            fi
-            if grep -A 15 -B 6 "FATAL EXCEPTION" android-logcat.txt | grep -q "com.hllyoud.guess"; then
-              echo "Fatal exception detected for Hllyoud guess"
-              grep -A 40 -B 10 "FATAL EXCEPTION" android-logcat.txt | tail -n 120
-              exit 1
-            fi
-            adb shell dumpsys activity activities | grep -F "com.hllyoud.guess" | head -20 || true
-            echo "ANDROID_LAUNCH_OK"
+            sleep 10
+            adb exec-out screencap -p > 01-language.png
+            adb shell input tap 675 730
+            sleep 4
+            adb exec-out screencap -p > 02-after-language.png
+            adb logcat -d > android-logcat.txt
+            adb shell ps -A | grep -F "com.hllyoud.guess"
+            python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
+            echo ANDROID_UI_SMOKE_OK
 
       - name: Upload Android runtime evidence
         if: always()
@@ -116,8 +105,8 @@ jobs:
         with:
           name: HllyoudGuess-Android-runtime
           path: |
-            android-screen.png
-            android-window.xml
+            01-language.png
+            02-after-language.png
             android-start.txt
             android-logcat.txt
           if-no-files-found: ignore
