@@ -1,135 +1,185 @@
 package com.hllyoud.guess;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.webkit.CookieManager;
-import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.graphics.Typeface;
 
 public class MainActivity extends Activity {
     private static final String GAME_URL = "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/hllyoud-app";
     private WebView webView;
     private FrameLayout root;
-    private TextView errorView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setStatusBarColor(Color.rgb(7, 9, 19));
-        getWindow().setNavigationBarColor(Color.rgb(7, 9, 19));
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        enterImmersiveMode();
 
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(7, 9, 19));
         setContentView(root);
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(7, 9, 19));
-        root.addView(webView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-
-        configureWebView();
-        webView.loadUrl(GAME_URL);
+        try {
+            createAndLoadWebView();
+        } catch (Throwable error) {
+            showSafeFallback();
+        }
     }
 
-    private void configureWebView() {
-        WebSettings s = webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(false);
-        s.setAllowContentAccess(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setMediaPlaybackRequiresUserGesture(true);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setSupportZoom(false);
-        s.setUserAgentString(s.getUserAgentString() + " HllyoudGuessAndroid/1.0");
+    private void createAndLoadWebView() {
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(7, 9, 19));
 
-        CookieManager cookies = CookieManager.getInstance();
-        cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(webView, true);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        root.addView(webView, params);
 
-        webView.setWebChromeClient(new WebChromeClient());
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+
+        try {
+            String ua = settings.getUserAgentString();
+            if (ua != null && !ua.contains("HllyoudGuessAndroid")) {
+                settings.setUserAgentString(ua + " HllyoudGuessAndroid/1.0.1");
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            CookieManager cookieManager = CookieManager.getInstance();
+            cookieManager.setAcceptCookie(true);
+            cookieManager.setAcceptThirdPartyCookies(webView, true);
+        } catch (Throwable ignored) {
+        }
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String scheme = request.getUrl().getScheme();
-                if ("https".equalsIgnoreCase(scheme)) {
-                    view.loadUrl(request.getUrl().toString());
+                Uri uri = request.getUrl();
+                String scheme = uri.getScheme();
+                if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                    return false;
+                }
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Throwable ignored) {
                 }
                 return true;
             }
 
             @Override
-            public void onPageFinished(WebView view, String url) {
-                hideError();
-                enterImmersiveMode();
-            }
-
-            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) showError();
+                if (request != null && request.isForMainFrame()) {
+                    showConnectionError();
+                }
             }
         });
+
+        webView.loadUrl(GAME_URL);
     }
 
-    private void showError() {
-        if (errorView == null) {
-            errorView = new TextView(this);
-            errorView.setText("تعذر الاتصال باللعبة\n\nاضغط هنا للمحاولة مرة أخرى");
-            errorView.setTextColor(Color.WHITE);
-            errorView.setTextSize(18f);
-            errorView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            errorView.setGravity(Gravity.CENTER);
-            errorView.setPadding(32, 32, 32, 32);
-            errorView.setBackgroundColor(Color.rgb(7, 9, 19));
-            errorView.setOnClickListener(v -> {
-                hideError();
-                webView.loadUrl(GAME_URL);
-            });
-            root.addView(errorView, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT));
-        }
-        errorView.setVisibility(View.VISIBLE);
-        errorView.bringToFront();
+    private TextView makeButton(String text) {
+        TextView button = new TextView(this);
+        button.setText(text);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(17f);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(28, 24, 28, 24);
+        button.setBackgroundColor(Color.rgb(92, 66, 190));
+        return button;
     }
 
-    private void hideError() {
-        if (errorView != null) errorView.setVisibility(View.GONE);
+    private void showConnectionError() {
+        if (isFinishing() || root == null) return;
+        root.removeAllViews();
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(48, 48, 48, 48);
+
+        TextView message = new TextView(this);
+        message.setText("تعذر الاتصال باللعبة\nتأكد من الإنترنت وحاول مرة أخرى");
+        message.setTextColor(Color.WHITE);
+        message.setTextSize(19f);
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(0, 0, 0, 36);
+        panel.addView(message);
+
+        TextView retry = makeButton("إعادة المحاولة");
+        retry.setOnClickListener(v -> {
+            root.removeAllViews();
+            try {
+                createAndLoadWebView();
+            } catch (Throwable error) {
+                showSafeFallback();
+            }
+        });
+        panel.addView(retry);
+
+        root.addView(panel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
     }
 
-    private void enterImmersiveMode() {
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-    }
+    private void showSafeFallback() {
+        if (root == null) return;
+        root.removeAllViews();
 
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enterImmersiveMode();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(48, 48, 48, 48);
+
+        TextView title = new TextView(this);
+        title.setText("Hllyoud guess");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(27f);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 0, 0, 24);
+        panel.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText("مكوّن عرض الويب على الجهاز يحتاج تحديث.\nيمكنك فتح اللعبة الآن من المتصفح.");
+        message.setTextColor(Color.LTGRAY);
+        message.setTextSize(17f);
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(0, 0, 0, 36);
+        panel.addView(message);
+
+        TextView open = makeButton("فتح اللعبة");
+        open.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(GAME_URL)));
+            } catch (Throwable ignored) {
+            }
+        });
+        panel.addView(open);
+
+        root.addView(panel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
     }
 
     @Override
@@ -143,11 +193,15 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (webView != null) {
-            webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
-            webView.destroy();
+        try {
+            if (webView != null) {
+                webView.stopLoading();
+                webView.loadUrl("about:blank");
+                webView.setWebViewClient(null);
+                webView.destroy();
+                webView = null;
+            }
+        } catch (Throwable ignored) {
         }
         super.onDestroy();
     }
