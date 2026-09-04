@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout
@@ -43,9 +43,19 @@ jobs:
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk HllyoudGuess.apk
 
-      - name: Upload APK
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: HllyoudGuess-APK
           path: HllyoudGuess.apk
           retention-days: 30
+
+      - name: Create or update public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest HllyoudGuess.apk --clobber
+          else
+            gh release create android-latest HllyoudGuess.apk --title "Hllyoud guess Android" --notes "Latest installable Android APK for Hllyoud guess."
+          fi
