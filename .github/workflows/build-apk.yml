@@ -50,15 +50,38 @@ jobs:
 
       - name: Verify APK
         run: |
+          test -s HllyoudGuess.apk
           unzip -t HllyoudGuess.apk >/dev/null
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose HllyoudGuess.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging HllyoudGuess.apk | tee /tmp/badging.txt
           grep -F "package: name='com.hllyoud.guess'" /tmp/badging.txt
+          grep -F "versionName='1.0.2'" /tmp/badging.txt
           grep -F "application-label:'Hllyoud guess'" /tmp/badging.txt
-          unzip -l HllyoudGuess.apk | grep -F "ic_launcher"
+          grep -F "application-icon-" /tmp/badging.txt
+          grep -F "launchable-activity: name='com.hllyoud.guess.MainActivity'" /tmp/badging.txt
+
+      - name: Android emulator launch test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r HllyoudGuess.apk
+            adb logcat -c
+            adb shell am start -W -n com.hllyoud.guess/.MainActivity
+            sleep 12
+            adb shell pidof com.hllyoud.guess
+            if adb logcat -d | grep -A 8 -B 3 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
+              echo "Fatal exception detected for Hllyoud guess"
+              exit 1
+            fi
 
       - name: APK size
-        run: ls -lh HllyoudGuess.apk
+        run: |
+          stat --printf='APK_BYTES=%s\n' HllyoudGuess.apk
+          ls -lh HllyoudGuess.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
