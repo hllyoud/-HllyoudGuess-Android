@@ -59,8 +59,14 @@ jobs:
           grep -F "application-label:'Hllyoud guess'" /tmp/badging.txt
           grep -F "application-icon-" /tmp/badging.txt
           grep -F "launchable-activity: name='com.hllyoud.guess.MainActivity'" /tmp/badging.txt
+          unzip -p HllyoudGuess.apk classes.dex > /tmp/classes.dex
+          "$ANDROID_HOME/build-tools/35.0.0/dexdump" /tmp/classes.dex | grep -F "Lcom/hllyoud/guess/MainActivity;"
 
-      - name: Android emulator launch test
+      - name: Enable Android emulator acceleration
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Android emulator install and launch test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -69,11 +75,19 @@ jobs:
           disable-animations: true
           script: |
             adb install -r HllyoudGuess.apk
+            sleep 10
+            adb shell pm list packages | grep -F "package:com.hllyoud.guess"
+            adb shell dumpsys package com.hllyoud.guess | grep -F "com.hllyoud.guess.MainActivity"
+            COMPONENT=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.hllyoud.guess | tr -d '\r')
+            echo "Resolved launcher: $COMPONENT"
+            test -n "$COMPONENT"
             adb logcat -c
-            adb shell am start -W -n com.hllyoud.guess/.MainActivity
-            sleep 12
-            adb shell pidof com.hllyoud.guess
-            if adb logcat -d | grep -A 8 -B 3 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
+            adb shell am start -W -n "$COMPONENT"
+            sleep 15
+            PID=$(adb shell pidof com.hllyoud.guess || true)
+            echo "App PID: $PID"
+            test -n "$PID"
+            if adb logcat -d | grep -A 10 -B 4 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
               echo "Fatal exception detected for Hllyoud guess"
               exit 1
             fi
