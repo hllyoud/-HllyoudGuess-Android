@@ -3,6 +3,6 @@
     <item android:gravity="center">
         <bitmap
             android:gravity="center"
-            android:src="@drawable/app_icon" />
+            android:src="@mipmap/ic_launcher" />
     </item>
 </layer-list>
