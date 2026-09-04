@@ -37,6 +37,17 @@ jobs:
           curl -fsSL --max-time 25 "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/hllyoud-app" -o /tmp/hllyoud-game.html
           test "$(wc -c < /tmp/hllyoud-game.html)" -gt 1000
 
+      - name: Create temporary E2E account
+        run: |
+          TEST_USER="androidci${GITHUB_RUN_NUMBER}"
+          TEST_PASS="Ci${GITHUB_RUN_ID}x9"
+          HTTP_CODE=$(curl -sS -o /tmp/signup.json -w "%{http_code}" -X POST "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/signup-username" -H "Content-Type: application/json" --data "{\"username\":\"${TEST_USER}\",\"password\":\"${TEST_PASS}\",\"preferred_language\":\"ar\"}")
+          cat /tmp/signup.json
+          test "$HTTP_CODE" = "200"
+          python3 -c "import json; d=json.load(open('/tmp/signup.json')); assert d.get('ok') is True and d.get('user',{}).get('username')"
+          echo "ANDROID_TEST_USER=${TEST_USER}" >> "$GITHUB_ENV"
+          echo "ANDROID_TEST_PASS=${TEST_PASS}" >> "$GITHUB_ENV"
+
       - name: Build installable APK
         run: gradle :app:assembleDebug
 
@@ -75,7 +86,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android UI signup smoke test
+      - name: Android real login test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -94,13 +105,19 @@ jobs:
             adb shell input tap 675 730
             sleep 4
             adb exec-out screencap -p > 02-login.png
-            adb shell input tap 370 535
-            sleep 3
-            adb exec-out screencap -p > 03-signup.png
+            adb shell input tap 450 760
+            adb shell input text "$ANDROID_TEST_USER"
+            adb shell input tap 450 960
+            adb shell input text "$ANDROID_TEST_PASS"
+            adb shell input keyevent 4
+            sleep 1
+            adb shell input tap 470 1105
+            sleep 10
+            adb exec-out screencap -p > 03-after-login.png
             adb logcat -d > android-logcat.txt
             adb shell ps -A | grep -F "com.hllyoud.guess"
             python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
-            echo ANDROID_SIGNUP_SCREEN_OK
+            echo ANDROID_LOGIN_FLOW_OK
 
       - name: Upload Android runtime evidence
         if: always()
@@ -110,7 +127,7 @@ jobs:
           path: |
             01-language.png
             02-login.png
-            03-signup.png
+            03-after-login.png
             android-start.txt
             android-logcat.txt
           if-no-files-found: ignore
