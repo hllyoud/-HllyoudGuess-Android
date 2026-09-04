@@ -42,7 +42,6 @@ jobs:
           TEST_USER="androidci${GITHUB_RUN_NUMBER}"
           TEST_PASS="Ci${GITHUB_RUN_ID}x9"
           HTTP_CODE=$(curl -sS -o /tmp/signup.json -w "%{http_code}" -X POST "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/signup-username" -H "Content-Type: application/json" --data "{\"username\":\"${TEST_USER}\",\"password\":\"${TEST_PASS}\",\"preferred_language\":\"ar\"}")
-          cat /tmp/signup.json
           test "$HTTP_CODE" = "200"
           python3 -c "import json; d=json.load(open('/tmp/signup.json')); assert d.get('ok') is True and d.get('user',{}).get('username')"
           echo "ANDROID_TEST_USER=${TEST_USER}" >> "$GITHUB_ENV"
@@ -95,6 +94,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
+            set -e
             adb install -r HllyoudGuess.apk
             adb shell pm list packages | grep -F "package:com.hllyoud.guess"
             adb logcat -c
@@ -102,18 +102,30 @@ jobs:
             adb shell am start -W -n com.hllyoud.guess/.MainActivity | tee android-start.txt
             sleep 10
             adb exec-out screencap -p > 01-language.png
+
+            # Arabic
             adb shell input tap 675 730
             sleep 4
             adb exec-out screencap -p > 02-login.png
+
+            # Username: type, then hide IME before tapping password.
             adb shell input tap 450 760
             adb shell input text "$ANDROID_TEST_USER"
-            adb shell input keyevent 61
+            adb shell input keyevent 4
+            sleep 1
+
+            # Password: type, hide IME, then tap the visible login button.
+            adb shell input tap 450 960
             adb shell input text "$ANDROID_TEST_PASS"
+            adb shell input keyevent 4
+            sleep 1
             adb exec-out screencap -p > 03-filled-login.png
-            adb shell input keyevent 61
-            adb shell input keyevent 66
+            adb shell input tap 470 1105
             sleep 10
             adb exec-out screencap -p > 04-after-login.png
+
+            adb shell uiautomator dump /sdcard/after-login.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/after-login.xml after-login.xml >/dev/null 2>&1 || true
             adb logcat -d > android-logcat.txt
             adb shell ps -A | grep -F "com.hllyoud.guess"
             python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
@@ -129,6 +141,7 @@ jobs:
             02-login.png
             03-filled-login.png
             04-after-login.png
+            after-login.xml
             android-start.txt
             android-logcat.txt
           if-no-files-found: ignore
