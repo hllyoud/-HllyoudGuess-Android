@@ -21,7 +21,7 @@ jobs:
           base64 -d assets/icon.b64 > app/src/main/res/mipmap-xxxhdpi/ic_launcher.jpg
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -62,6 +62,20 @@ jobs:
           unzip -p HllyoudGuess.apk classes.dex > /tmp/classes.dex
           "$ANDROID_HOME/build-tools/35.0.0/dexdump" /tmp/classes.dex | grep -F "Lcom/hllyoud/guess/MainActivity;"
 
+      - name: APK size
+        run: |
+          stat --printf='APK_BYTES=%s\n' HllyoudGuess.apk | tee apk-size.txt
+          ls -lh HllyoudGuess.apk | tee -a apk-size.txt
+
+      - name: Upload APK candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: HllyoudGuess-APK-candidate
+          path: |
+            HllyoudGuess.apk
+            apk-size.txt
+          retention-days: 30
+
       - name: Enable Android emulator acceleration
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
@@ -70,31 +84,51 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           disable-animations: true
           script: |
+            set -e
             adb install -r HllyoudGuess.apk
-            sleep 5
             adb shell pm list packages | grep -F "package:com.hllyoud.guess"
             adb logcat -c
-            adb shell monkey -p com.hllyoud.guess -c android.intent.category.LAUNCHER 1
-            sleep 15
+            adb shell am force-stop com.hllyoud.guess
+            adb shell am start -W -n com.hllyoud.guess/.MainActivity | tee android-start.txt
+            sleep 12
+            adb exec-out screencap -p > android-screen.png || true
+            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/window.xml android-window.xml >/dev/null 2>&1 || true
+            adb logcat -d > android-logcat.txt || true
             PID=$(adb shell pidof com.hllyoud.guess || true)
             echo "App PID: $PID"
-            test -n "$PID"
-            adb shell dumpsys activity activities | grep -F "com.hllyoud.guess" | head -20
-            if adb logcat -d | grep -A 12 -B 4 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
-              echo "Fatal exception detected for Hllyoud guess"
+            if [ -z "$PID" ]; then
+              echo "APP_PROCESS_NOT_RUNNING"
+              tail -n 500 android-logcat.txt
               exit 1
             fi
+            if grep -A 15 -B 6 "FATAL EXCEPTION" android-logcat.txt | grep -q "com.hllyoud.guess"; then
+              echo "Fatal exception detected for Hllyoud guess"
+              grep -A 40 -B 10 "FATAL EXCEPTION" android-logcat.txt | tail -n 120
+              exit 1
+            fi
+            adb shell dumpsys activity activities | grep -F "com.hllyoud.guess" | head -20 || true
+            echo "ANDROID_LAUNCH_OK"
 
-      - name: APK size
-        run: |
-          stat --printf='APK_BYTES=%s\n' HllyoudGuess.apk
-          ls -lh HllyoudGuess.apk
+      - name: Upload Android runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HllyoudGuess-Android-runtime
+          path: |
+            android-screen.png
+            android-window.xml
+            android-start.txt
+            android-logcat.txt
+          if-no-files-found: ignore
+          retention-days: 30
 
-      - name: Upload workflow artifact
+      - name: Publish validated APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: HllyoudGuess-APK
@@ -108,5 +142,5 @@ jobs:
           if gh release view android-latest >/dev/null 2>&1; then
             gh release upload android-latest HllyoudGuess.apk --clobber
           else
-            gh release create android-latest HllyoudGuess.apk --title "Hllyoud guess Android" --notes "Latest installable Android APK for Hllyoud guess."
+            gh release create android-latest HllyoudGuess.apk --title "Hllyoud guess Android" --notes "Latest validated Android APK for Hllyoud guess."
           fi
