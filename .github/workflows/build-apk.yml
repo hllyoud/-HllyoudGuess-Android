@@ -75,19 +75,16 @@ jobs:
           disable-animations: true
           script: |
             adb install -r HllyoudGuess.apk
-            sleep 10
+            sleep 5
             adb shell pm list packages | grep -F "package:com.hllyoud.guess"
-            adb shell dumpsys package com.hllyoud.guess | grep -F "com.hllyoud.guess.MainActivity"
-            COMPONENT=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.hllyoud.guess | tr -d '\r')
-            echo "Resolved launcher: $COMPONENT"
-            test -n "$COMPONENT"
             adb logcat -c
-            adb shell am start -W -n "$COMPONENT"
+            adb shell monkey -p com.hllyoud.guess -c android.intent.category.LAUNCHER 1
             sleep 15
             PID=$(adb shell pidof com.hllyoud.guess || true)
             echo "App PID: $PID"
             test -n "$PID"
-            if adb logcat -d | grep -A 10 -B 4 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
+            adb shell dumpsys activity activities | grep -F "com.hllyoud.guess" | head -20
+            if adb logcat -d | grep -A 12 -B 4 "FATAL EXCEPTION" | grep -q "com.hllyoud.guess"; then
               echo "Fatal exception detected for Hllyoud guess"
               exit 1
             fi
