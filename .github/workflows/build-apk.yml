@@ -15,10 +15,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore approved app icon
+      - name: Restore launcher icon
         run: |
-          mkdir -p app/src/main/res/drawable
-          base64 -d assets/icon.b64 > app/src/main/res/drawable/app_icon.jpg
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          base64 -d assets/icon.b64 > app/src/main/res/mipmap-xxxhdpi/ic_launcher.jpg
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -37,11 +37,28 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Check live game endpoint
+        run: |
+          curl -fsSL --max-time 25 "https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/hllyoud-app" -o /tmp/hllyoud-game.html
+          test "$(wc -c < /tmp/hllyoud-game.html)" -gt 1000
+
       - name: Build installable APK
         run: gradle :app:assembleDebug
 
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk HllyoudGuess.apk
+
+      - name: Verify APK
+        run: |
+          unzip -t HllyoudGuess.apk >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose HllyoudGuess.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging HllyoudGuess.apk | tee /tmp/badging.txt
+          grep -F "package: name='com.hllyoud.guess'" /tmp/badging.txt
+          grep -F "application-label:'Hllyoud guess'" /tmp/badging.txt
+          unzip -l HllyoudGuess.apk | grep -F "ic_launcher"
+
+      - name: APK size
+        run: ls -lh HllyoudGuess.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
