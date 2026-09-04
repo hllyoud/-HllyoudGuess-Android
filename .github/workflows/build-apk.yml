@@ -15,11 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore launcher icon
-        run: |
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
-          base64 -d assets/icon.b64 > app/src/main/res/mipmap-xxxhdpi/ic_launcher.jpg
-
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
@@ -55,10 +50,10 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose HllyoudGuess.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging HllyoudGuess.apk | tee /tmp/badging.txt
           grep -F "package: name='com.hllyoud.guess'" /tmp/badging.txt
-          grep -F "versionName='1.0.2'" /tmp/badging.txt
+          grep -F "versionName='1.0.3'" /tmp/badging.txt
           grep -F "application-label:'Hllyoud guess'" /tmp/badging.txt
-          grep -F "application-icon-" /tmp/badging.txt
           grep -F "launchable-activity: name='com.hllyoud.guess.MainActivity'" /tmp/badging.txt
+          grep -F "application-icon-" /tmp/badging.txt || grep -F "icon='res/drawable/ic_launcher.xml'" /tmp/badging.txt
           unzip -p HllyoudGuess.apk classes.dex > /tmp/classes.dex
           "$ANDROID_HOME/build-tools/35.0.0/dexdump" /tmp/classes.dex | grep -F "Lcom/hllyoud/guess/MainActivity;"
 
