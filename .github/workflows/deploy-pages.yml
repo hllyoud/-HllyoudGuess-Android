@@ -1,0 +1,52 @@
+name: Deploy Hllyoud Guess Web
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/deploy-pages.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Build direct static game
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p site/android
+          curl -fL --retry 4 --retry-delay 2 \
+            'https://tmphtxyrpwzwfivsvijz.supabase.co/functions/v1/hllyoud-app' \
+            -o site/index.html
+          test -s site/index.html
+          grep -qi '<html' site/index.html
+          cat > site/android/index.html <<'HTML'
+          <!doctype html>
+          <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=https://github.com/hllyoud/-HllyoudGuess-Android/releases/download/android-latest/HllyoudGuess.apk"><title>Hllyoud Guess Android</title></head><body><p>Downloading Hllyoud Guess...</p><script>location.replace('https://github.com/hllyoud/-HllyoudGuess-Android/releases/download/android-latest/HllyoudGuess.apk');</script></body></html>
+          HTML
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
