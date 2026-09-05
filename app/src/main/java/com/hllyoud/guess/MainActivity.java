@@ -156,12 +156,12 @@ public class MainActivity extends Activity {
         String js = "(function(){"+
                 "const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!='none'&&s.visibility!='hidden'};"+
                 "const ins=[...document.querySelectorAll('input')].filter(vis),pw=ins.find(e=>(e.type||'').toLowerCase()==='password'),un=ins.find(e=>e!==pw&&!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));"+
-                "if(!un||!pw)return 'missing_inputs:'+document.body.innerText.slice(0,500);"+
+                "if(!un||!pw)return 'missing_inputs';"+
                 "const set=(e,v)=>{const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d&&d.set?d.set.call(e,v):e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};"+
                 "set(un,"+u+");set(pw,"+p+");"+
                 "const form=pw.closest('form');let b=form&&form.querySelector('button[type=submit],input[type=submit]');"+
                 "if(!b){const bs=[...document.querySelectorAll('button,[role=button]')].filter(vis);b=bs.reverse().find(x=>{const t=(x.innerText||x.textContent||'').trim().toLowerCase();return t==='دخول'||t==='login'})}"+
-                "if(!b)return 'missing_login_button';b.click();return 'login_clicked:user='+un.value+',plen='+pw.value.length;})()";
+                "if(!b)return 'missing_login_button';b.click();return 'login_clicked';})()";
         evalE2E(js, "LOGIN", () -> handler.postDelayed(() -> logBody("AFTER_LOGIN", () ->
                 handler.postDelayed(this::e2eOpenComputer, 1500)), 7000));
     }
