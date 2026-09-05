@@ -93,7 +93,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Android live WebView E2E
+      - name: Android live gameplay E2E
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -108,23 +108,33 @@ jobs:
             adb logcat -c
             adb shell am force-stop com.hllyoud.guess
             adb shell am start -W -n com.hllyoud.guess/.MainActivity --ez hllyoud_e2e true --es e2e_username "$ANDROID_TEST_USER" --es e2e_password "$ANDROID_TEST_PASS" | tee android-start.txt
-            sleep 27
+            sleep 50
             adb exec-out screencap -p > android-e2e.png
             adb logcat -d > android-logcat.txt
             grep -F "HllyoudE2E" android-logcat.txt | tee e2e-log.txt
             grep -F "E2E_START" e2e-log.txt
+            grep -F "LANGUAGE=\"arabic_clicked\"" e2e-log.txt
             grep -F "LOGIN=\"login_clicked\"" e2e-log.txt
-            grep -F "AFTER_LOGIN=" e2e-log.txt
-            grep -F "COMPUTER=" e2e-log.txt
-            grep -F "AFTER_COMPUTER_CLICK=" e2e-log.txt
-            grep -F "SECRET=" e2e-log.txt
-            grep -F "AFTER_SECRET=" e2e-log.txt
+            grep -F "AFTER_LOGIN_SCREEN=" e2e-log.txt
+            grep -F "AFTER_TUTORIAL_SCREEN=\"home\"" e2e-log.txt
+            grep -F "COMPUTER=\"computer_clicked\"" e2e-log.txt
+            grep -F "AFTER_COMPUTER_STATE=" e2e-log.txt
+            grep -F "SECRET=\"secret_50_clicked\"" e2e-log.txt
+            grep -F "AFTER_SECRET_STATE=" e2e-log.txt
+            grep -F "PLAY_ACTION=" e2e-log.txt
+            grep -F "FINAL_STATE=" e2e-log.txt
+            grep -F "FINAL_BODY=" e2e-log.txt
+            python3 - <<'PY'
+            t=open('e2e-log.txt',errors='ignore').read()
+            assert 'computer' in t.lower(), 'CPU mode not observed'
+            assert ('playing' in t.lower() or 'match_over' in t.lower()), 'Playing state not observed'
+            PY
             if grep -F "HllyoudConsole: ERROR" android-logcat.txt; then echo "WEBVIEW_CONSOLE_ERROR"; exit 1; fi
             adb shell dumpsys activity activities | grep -F "mResumedActivity" | tee resumed.txt
             grep -F "com.hllyoud.guess" resumed.txt
             adb shell ps -A | grep -F "com.hllyoud.guess"
             python3 -c "p=open('android-logcat.txt',errors='ignore').read(); blocks=p.split('FATAL EXCEPTION'); assert not any('com.hllyoud.guess' in b[:5000] for b in blocks[1:]), 'Fatal exception detected for Hllyoud guess'"
-            echo ANDROID_LIVE_E2E_CAPTURED
+            echo ANDROID_GAMEPLAY_E2E_OK
 
       - name: Upload Android runtime evidence
         if: always()
