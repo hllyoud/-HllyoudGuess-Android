@@ -146,47 +146,56 @@ public class MainActivity extends Activity {
         if (e2eStarted || webView == null || e2eUsername == null || e2ePassword == null || e2eUsername.isEmpty() || e2ePassword.isEmpty()) return;
         e2eStarted = true;
         Log.i(E2E_TAG, "E2E_START");
-        handler.postDelayed(() -> evalE2E(clickTextScript("العربية", "Arabic"), "LANGUAGE", () ->
-                handler.postDelayed(this::e2eLogin, 1800)), 1800);
+        handler.postDelayed(() -> evalE2E("(function(){const b=document.getElementById('chooseAr');if(!b)return 'missing_language';b.click();return 'arabic_clicked'})()", "LANGUAGE", () -> handler.postDelayed(this::e2eLogin, 1600)), 1800);
     }
 
     private void e2eLogin() {
         String u = JSONObject.quote(e2eUsername);
         String p = JSONObject.quote(e2ePassword);
         String js = "(function(){"+
-                "const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!='none'&&s.visibility!='hidden'};"+
-                "const ins=[...document.querySelectorAll('input')].filter(vis),pw=ins.find(e=>(e.type||'').toLowerCase()==='password'),un=ins.find(e=>e!==pw&&!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));"+
-                "if(!un||!pw)return 'missing_inputs';"+
+                "const un=document.getElementById('loginIdentifier'),pw=document.getElementById('loginPassword'),b=document.getElementById('loginBtn');"+
+                "if(!un||!pw||!b)return 'missing_login_controls';"+
                 "const set=(e,v)=>{const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d&&d.set?d.set.call(e,v):e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};"+
-                "set(un,"+u+");set(pw,"+p+");"+
-                "const form=pw.closest('form');let b=form&&form.querySelector('button[type=submit],input[type=submit]');"+
-                "if(!b){const bs=[...document.querySelectorAll('button,[role=button]')].filter(vis);b=bs.reverse().find(x=>{const t=(x.innerText||x.textContent||'').trim().toLowerCase();return t==='دخول'||t==='login'})}"+
-                "if(!b)return 'missing_login_button';b.click();return 'login_clicked';})()";
-        evalE2E(js, "LOGIN", () -> handler.postDelayed(() -> logBody("AFTER_LOGIN", () ->
-                handler.postDelayed(this::e2eOpenComputer, 1500)), 7000));
+                "set(un,"+u+");set(pw,"+p+");b.click();return 'login_clicked';})()";
+        evalE2E(js, "LOGIN", () -> handler.postDelayed(() -> logScreen("AFTER_LOGIN_SCREEN", () -> e2eTutorialStep(0)), 6500));
+    }
+
+    private void e2eTutorialStep(int step) {
+        if (step >= 3) {
+            handler.postDelayed(() -> logScreen("AFTER_TUTORIAL_SCREEN", () -> handler.postDelayed(this::e2eOpenComputer, 900)), 2200);
+            return;
+        }
+        String js = "(function(){const s=document.querySelector('.screen.active')?.id||'';if(s!=='tutorial')return 'skip:'+s;const b=document.getElementById('tutorialNext');if(!b)return 'missing_tutorial_next';b.click();return 'tutorial_next_' + " + (step + 1) + ";})()";
+        evalE2E(js, "TUTORIAL_" + (step + 1), () -> handler.postDelayed(() -> e2eTutorialStep(step + 1), 1200));
     }
 
     private void e2eOpenComputer() {
-        evalE2E(clickTextScript("الكمبيوتر", "كمبيوتر", "computer", "bot"), "COMPUTER", () ->
-                handler.postDelayed(() -> logBody("AFTER_COMPUTER_CLICK", () -> handler.postDelayed(this::e2eTrySecret, 1200)), 4500));
+        String js = "(function(){try{if(typeof ensureComputerUI==='function')ensureComputerUI()}catch(_){}const b=document.getElementById('computerRoomBtn');if(!b)return 'missing_computer_button:'+((document.querySelector('.screen.active')||{}).id||'');b.click();return 'computer_clicked'})()";
+        evalE2E(js, "COMPUTER", () -> handler.postDelayed(() -> logState("AFTER_COMPUTER_STATE", () -> handler.postDelayed(this::e2eLockSecret, 800)), 6000));
     }
 
-    private void e2eTrySecret() {
+    private void e2eLockSecret() {
+        String js = "(function(){const n=document.getElementById('secretInput'),b=document.getElementById('lockSecretBtn');if(!n||!b)return 'missing_secret_controls:'+((document.querySelector('.screen.active')||{}).id||'');const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d&&d.set?d.set.call(n,'50'):n.value='50';n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));b.click();return 'secret_50_clicked'})()";
+        evalE2E(js, "SECRET", () -> handler.postDelayed(() -> logState("AFTER_SECRET_STATE", () -> handler.postDelayed(this::e2ePlayAction, 1000)), 6500));
+    }
+
+    private void e2ePlayAction() {
         String js = "(function(){"+
-                "const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!='none'&&s.visibility!='hidden'};"+
-                "const ins=[...document.querySelectorAll('input')].filter(vis),n=ins.find(e=>['number','tel'].includes((e.type||'').toLowerCase())||/secret|رقم/i.test((e.placeholder||'')+' '+(e.name||'')));"+
-                "if(!n)return 'no_number_input:'+document.body.innerText.slice(0,800);"+
-                "const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d&&d.set?d.set.call(n,'50'):n.value='50';n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));"+
-                "const bs=[...document.querySelectorAll('button,[role=button]')].filter(vis),b=bs.find(x=>/تأكيد|ثبت|جاهز|ابدأ|confirm|ready|start/i.test((x.innerText||x.textContent||'')));"+
-                "if(b){b.click();return 'secret_clicked:'+((b.innerText||'').trim())}return 'secret_filled_no_button';})()";
-        evalE2E(js, "SECRET", () -> handler.postDelayed(() -> logBody("AFTER_SECRET", null), 5000));
+                "if(!window.state||!window.currentUser)return 'state_missing';const room=state.room||{},round=state.round||{},p=state.pending;"+
+                "if(room.status!=='playing')return 'not_playing:'+room.status;"+
+                "if(p&&p.guessed_against===currentUser.id){const id=Number(p.guessed_number)<50?'higherBtn':'lowerBtn',b=document.getElementById(id);if(!b)return 'answer_button_missing';b.click();return 'answered_cpu_guess:'+id+':'+p.guessed_number;}"+
+                "if(!p&&round.turn_user_id===currentUser.id){const n=document.getElementById('guessInput'),b=document.getElementById('guessBtn');if(!n||!b)return 'guess_controls_missing';const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d&&d.set?d.set.call(n,'50'):n.value='50';n.dispatchEvent(new Event('input',{bubbles:true}));b.click();return 'human_guess_clicked:50';}"+
+                "return 'waiting_for_cpu';})()";
+        evalE2E(js, "PLAY_ACTION", () -> handler.postDelayed(() -> logState("FINAL_STATE", () -> logBody("FINAL_BODY", null)), 7500));
     }
 
-    private String clickTextScript(String... needles) {
-        StringBuilder a = new StringBuilder("[");
-        for (int i=0;i<needles.length;i++) { if (i>0) a.append(','); a.append(JSONObject.quote(needles[i].toLowerCase())); }
-        a.append(']');
-        return "(function(){const ns="+a+",vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!='none'&&s.visibility!='hidden'};const es=[...document.querySelectorAll('button,[role=button],a')].filter(vis),e=es.find(x=>{const t=(x.innerText||x.textContent||'').trim().toLowerCase();return ns.some(n=>t.includes(n))});if(!e)return 'not_found:'+document.body.innerText.slice(0,900);const t=(e.innerText||e.textContent||'').trim();e.click();return 'clicked:'+t;})()";
+    private void logScreen(String label, Runnable after) {
+        evalE2E("(function(){return document.querySelector('.screen.active')?.id||'none'})()", label, after);
+    }
+
+    private void logState(String label, Runnable after) {
+        String js = "(function(){try{return JSON.stringify({screen:document.querySelector('.screen.active')?.id||'',room:window.state?.room?.status||'',mode:window.state?.room?.game_mode||'',round:window.state?.room?.current_round||0,turn:window.state?.round?.turn_user_id||'',pending:!!window.state?.pending})}catch(e){return 'state_error:'+e.message}})()";
+        evalE2E(js, label, after);
     }
 
     private void evalE2E(String js, String label, Runnable after) {
