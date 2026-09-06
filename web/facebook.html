@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#070b17" />
+  <title>HLLYOUD GUESS</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b17;color:#fff;font-family:Arial,Tahoma,sans-serif}
+    #gameFrame{position:fixed;inset:0;width:100%;height:100%;border:0;background:#070b17;display:none}
+    #boot{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% -5%,rgba(116,79,255,.40),transparent 42%),linear-gradient(180deg,#0b1023,#070a16)}
+    .card{width:min(390px,100%);padding:30px 22px;border-radius:30px;background:#111831;border:1px solid #ffffff18;text-align:center;box-shadow:0 30px 90px #000b}
+    .mark{width:100px;height:100px;margin:auto;border-radius:30px;display:grid;place-items:center;font-size:50px;background:linear-gradient(145deg,#7657ff,#5038bb)}
+    h1{font-size:29px;margin:16px 0 4px}.state{font-size:18px;font-weight:900;margin-top:22px}.sub{font-size:13px;color:#8996bf;margin-top:6px;line-height:1.55}
+    .track{height:8px;margin-top:20px;border-radius:99px;background:#060914;overflow:hidden}.bar{height:100%;width:12%;background:linear-gradient(90deg,#6963ff,#a65aff);transition:width .3s}
+    .err{display:none;margin-top:15px;padding:12px;border-radius:14px;background:#431927;color:#ffd0da;font-size:12px;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word}
+    .retry{display:none;width:100%;margin-top:12px;padding:14px;border:0;border-radius:15px;background:#7d5cff;color:#fff;font:inherit;font-weight:900;cursor:pointer}
+    .ver{margin-top:13px;color:#647098;font-size:10px}
+  </style>
+</head>
+<body>
+  <iframe id="gameFrame" title="Hllyoud Guess"></iframe>
+  <div id="boot">
+    <div class="card">
+      <div class="mark">⚡🧠</div>
+      <h1>HLLYOUD GUESS</h1>
+      <div id="state" class="state">جاري تشغيل اللعبة…</div>
+      <div id="sub" class="sub">دخول تلقائي بدون يوزر أو باسورد</div>
+      <div class="track"><div id="bar" class="bar"></div></div>
+      <div id="err" class="err"></div>
+      <button id="retry" class="retry" type="button">إعادة المحاولة</button>
+      <div class="ver">FACEBOOK WEB LOADER • V1</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const ROOT='https://tmphtxyrpwzwfivsvijz.supabase.co';
+    const KEY='sb_publishable_jfQeQXC3U16c_7Vauwlnbg_QkJhZen-';
+    const FB_LOGIN=ROOT+'/functions/v1/facebook-login';
+    const APP=ROOT+'/functions/v1/hllyoud-app';
+    const INSTALL_KEY='hllyoud_fb_web_install_v1';
+
+    const $=(id)=>document.getElementById(id);
+    const sb=createClient(ROOT,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+
+    function stage(title,sub,percent){
+      $('state').textContent=title;
+      $('sub').textContent=sub||'';
+      $('bar').style.width=Math.max(10,Math.min(100,percent||10))+'%';
+    }
+
+    function fail(error){
+      console.error('[HLLYOUD FB WEB]',error);
+      stage('تعذر تشغيل اللعبة','اضغط إعادة المحاولة',100);
+      $('err').style.display='block';
+      $('retry').style.display='block';
+      $('err').textContent=String(error?.stack||error?.message||error).slice(0,900);
+    }
+
+    function installId(){
+      let id=localStorage.getItem(INSTALL_KEY);
+      if(!id){
+        const bytes=new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        id=[...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');
+        localStorage.setItem(INSTALL_KEY,id);
+      }
+      return id;
+    }
+
+    async function bootstrap(){
+      const r=await fetch(FB_LOGIN,{
+        method:'POST',
+        headers:{'content-type':'application/json','apikey':KEY},
+        body:JSON.stringify({action:'bootstrap',install_id:installId()}),
+        cache:'no-store'
+      });
+      const text=await r.text();
+      let j={};
+      try{j=text?JSON.parse(text):{}}catch(_){j={raw:text}}
+      const session=j?.session?.access_token?j.session:(j?.data?.session?.access_token?j.data.session:null);
+      if(!r.ok||!session?.access_token||!session?.refresh_token){
+        throw new Error(String(j?.error||j?.code||('FACEBOOK_LOGIN_HTTP_'+r.status)));
+      }
+      return session;
+    }
+
+    async function run(){
+      $('err').style.display='none';
+      $('retry').style.display='none';
+      stage('تجهيز اللاعب تلقائيًا…','بدون شاشة تسجيل دخول',18);
+
+      const session=await bootstrap();
+
+      stage('تشغيل الجلسة…','تسجيل تلقائي',38);
+      const set=await sb.auth.setSession({
+        access_token:session.access_token,
+        refresh_token:session.refresh_token
+      });
+      if(set.error) throw set.error;
+
+      const check=await sb.auth.getUser();
+      if(check.error||!check.data.user?.id) throw new Error('SESSION_VERIFY_FAILED');
+
+      stage('تحميل آخر نسخة من اللعبة…','',58);
+      const appResponse=await fetch(APP+'?web_loader=1&t='+Date.now(),{cache:'no-store'});
+      if(!appResponse.ok) throw new Error('GAME_HTTP_'+appResponse.status);
+      const html=await appResponse.text();
+      if(!html||html.length<5000||!/<html/i.test(html)) throw new Error('GAME_HTML_INVALID');
+
+      stage('فتح اللعبة…','تم تسجيل الدخول ✅',82);
+      const frame=$('gameFrame');
+      frame.onload=()=>{
+        frame.style.display='block';
+        stage('جاهز ✅','',100);
+        setTimeout(()=>$('boot').remove(),250);
+      };
+      frame.srcdoc=html;
+    }
+
+    $('retry').addEventListener('click',()=>location.reload());
+    run().catch(fail);
+  </script>
+</body>
+</html>
